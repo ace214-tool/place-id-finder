@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Place ID讀懃ｴ｢</title>
+<title>Place ID検索</title>
 <style>
   :root{
     --bg:#f4f5f7; --card:#ffffff; --ink:#333a45; --sub:#8a919c; --line:#e3e6eb;
@@ -51,23 +51,23 @@
 <body>
 <main>
   <div class="card">
-    <h1>Place ID讀懃ｴ｢</h1>
-    <p class="lead">繝｢繝弱ヤ繝ｼ繝ｫ逋ｻ骭ｲ逕ｨ縲ょｺ怜錐縺ｨ蟶ょ玄逕ｺ譚托ｼ医∪縺溘・鬧・錐・峨ｒ蜈･繧後※讀懃ｴ｢縲・/p>
+    <h1>Place ID検索</h1>
+    <p class="lead">モノツール登録用。店名と市区町村（または駅名）を入れて検索。</p>
 
     <div class="keybox" id="keybox" hidden>
-      <p>Google Maps Platform縺ｮAPI繧ｭ繝ｼ縺梧悴險ｭ螳壹〒縺吶１laces API (New) 繧呈怏蜉ｹ縺ｫ縺励◆繧ｭ繝ｼ繧貞・蜉帙＠縺ｦ縺上□縺輔＞・医％縺ｮ繝悶Λ繧ｦ繧ｶ縺ｫ縺縺台ｿ晏ｭ倥＆繧後∪縺呻ｼ峨・/p>
+      <p>Google Maps PlatformのAPIキーが未設定です。Places API (New) を有効にしたキーを入力してください（このブラウザにだけ保存されます）。</p>
       <input type="text" id="keyInput" placeholder="AIza...">
       <div class="krow">
-        <button class="ghost" type="button" id="keySave">菫晏ｭ・/button>
-        <span class="keynote">HTML縺ｮ API_KEY 縺ｫ逶ｴ謗･譖ｸ縺・※繧０K</span>
+        <button class="ghost" type="button" id="keySave">保存</button>
+        <span class="keynote">HTMLの API_KEY に直接書いてもOK</span>
       </div>
     </div>
 
     <form id="f">
-      <input type="text" id="q" placeholder="萓具ｼ壹せ繝翫ャ繧ｯ縺ｲ縺ｾ繧上ｊ 鬮伜ｴ主ｸ・ autocomplete="off" autofocus>
-      <button type="submit" id="go">讀懃ｴ｢</button>
+      <input type="text" id="q" placeholder="例：スナックひまわり 高崎市" autocomplete="off" autofocus>
+      <button type="submit" id="go">検索</button>
     </form>
-    <p class="hint">蜷悟錐蠎励・蜿悶ｊ驕輔∴髦ｲ豁｢縺ｫ縲∝ｸょ玄逕ｺ譚代°鬧・錐縺ｾ縺ｧ蜈･繧後ｋ縺ｨ邨槭ｌ繧九ょ呵｣懊・譛螟ｧ10莉ｶ縲・/p>
+    <p class="hint">同名店の取り違え防止に、市区町村か駅名まで入れると絞れる。候補は最大10件。</p>
   </div>
 
   <div class="card" id="resultCard" hidden>
@@ -77,7 +77,8 @@
 </main>
 
 <script>
-// 笆ｼ API繧ｭ繝ｼ繧偵％縺薙↓雋ｼ繧後・繧ｭ繝ｼ蜈･蜉帶ｬ・・蜃ｺ縺ｪ縺上↑繧具ｼ・loud蛛ｴ縺ｧHTTP繝ｪ繝輔ぃ繝ｩ蛻ｶ髯舌ｒ蠢・★險ｭ螳夲ｼ・const API_KEY = "AIzaSyB_An_8VFAAs7hhbRlmDqstZSWcRqDztm8";
+// ▼ APIキーをここに貼ればキー入力欄は出なくなる（Cloud側でHTTPリファラ制限を必ず設定）
+const API_KEY = "AIzaSyB_An_8VFAAs7hhbRlmDqstZSWcRqDztm8";
 
 const KEY_LS = "placeid_finder_apikey";
 function getKey(){ return API_KEY || localStorage.getItem(KEY_LS) || ""; }
@@ -110,11 +111,11 @@ form.onsubmit = async (e) => {
   const text = q.value.trim();
   if(!text) return;
   const key = getKey();
-  if(!key){ keybox.hidden = false; setStatus("API繧ｭ繝ｼ繧定ｨｭ螳壹＠縺ｦ縺上□縺輔＞", true); return; }
+  if(!key){ keybox.hidden = false; setStatus("APIキーを設定してください", true); return; }
 
   go.disabled = true;
   resultCard.hidden = false;
-  setStatus("讀懃ｴ｢荳ｭ窶ｦ");
+  setStatus("検索中…");
   result.innerHTML = "";
 
   try{
@@ -140,7 +141,7 @@ form.onsubmit = async (e) => {
     }
     render(data.places || []);
   }catch(err){
-    setStatus("繧ｨ繝ｩ繝ｼ・・ + err.message, true);
+    setStatus("エラー：" + err.message, true);
   }finally{
     go.disabled = false;
   }
@@ -149,27 +150,27 @@ form.onsubmit = async (e) => {
 function render(places){
   if(!places.length){
     setStatus("");
-    result.innerHTML = '<div class="empty">隧ｲ蠖薙↑縺励ょｺ怜錐縺ｮ陦ｨ險假ｼ域ｼ｢蟄暦ｼ上き繝奇ｼ上せ繝壹・繧ｹ・峨ｒ螟峨∴繧九°縲∽ｽ乗園繧定ｶｳ縺励※蜀肴､懃ｴ｢縲・/div>';
+    result.innerHTML = '<div class="empty">該当なし。店名の表記（漢字／カナ／スペース）を変えるか、住所を足して再検索。</div>';
     return;
   }
-  setStatus(places.length + "莉ｶ繝偵ャ繝・);
+  setStatus(places.length + "件ヒット");
   result.innerHTML = places.map((p, i) => {
-    const tag = p.businessStatus === "CLOSED_PERMANENTLY" ? '<span class="tag closed">髢画･ｭ</span>'
-              : p.businessStatus === "CLOSED_TEMPORARILY" ? '<span class="tag temp">閾ｨ譎ゆｼ第･ｭ</span>' : "";
+    const tag = p.businessStatus === "CLOSED_PERMANENTLY" ? '<span class="tag closed">閉業</span>'
+              : p.businessStatus === "CLOSED_TEMPORARILY" ? '<span class="tag temp">臨時休業</span>' : "";
     return `<div class="row">
       <div class="num">${i+1}</div>
       <div class="info">
         <div class="name">${esc(p.displayName?.text || "")}${tag}</div>
         <div class="addr">${esc(p.formattedAddress || "")}</div>
-        <div class="pid"><code>${esc(p.id)}</code><button class="ghost" type="button" data-id="${esc(p.id)}">繧ｳ繝斐・</button></div>
+        <div class="pid"><code>${esc(p.id)}</code><button class="ghost" type="button" data-id="${esc(p.id)}">コピー</button></div>
       </div>
     </div>`;
   }).join("");
   result.querySelectorAll("button[data-id]").forEach(b => {
     b.onclick = async () => {
       await navigator.clipboard.writeText(b.dataset.id);
-      b.textContent = "繧ｳ繝斐・貂・; b.classList.add("done");
-      setTimeout(() => { b.textContent = "繧ｳ繝斐・"; b.classList.remove("done"); }, 1500);
+      b.textContent = "コピー済"; b.classList.add("done");
+      setTimeout(() => { b.textContent = "コピー"; b.classList.remove("done"); }, 1500);
     };
   });
 }
@@ -178,5 +179,3 @@ function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&l
 </script>
 </body>
 </html>
-
-
