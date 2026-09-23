@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Place ID検索</title>
+<style>
+  :root{
+    --bg:#f6f7f4; --ink:#1f2a24; --sub:#66716b; --line:#d9ded9;
+    --accent:#1a6b3c; --accent-ink:#ffffff; --warn:#a63d1e; --ok:#1a6b3c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px;line-height:1.6}
+  main{max-width:880px;margin:0 auto;padding:40px 20px 80px}
+  h1{font-size:22px;font-weight:600;margin:0 0 4px}
+  .lead{color:var(--sub);margin:0 0 24px;font-size:14px}
+  form{display:flex;gap:8px;margin-bottom:8px}
+  input[type=text]{flex:1;font-size:17px;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  button{font-size:15px;padding:0 20px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-ink);cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);padding:6px 12px;font-size:13px}
+  button.ghost:hover{border-color:var(--accent);color:var(--accent)}
+  .hint{color:var(--sub);font-size:13px;margin:0 0 28px}
+  .status{font-size:14px;margin:0 0 12px;min-height:22px}
+  .status.err{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-weight:600;font-size:13px;color:var(--sub);background:#fafbf9}
+  tr:last-child td{border-bottom:0}
+  .name{font-weight:600}
+  .addr{color:var(--sub);font-size:13px}
+  .closed{color:var(--warn);font-size:12px;margin-left:6px}
+  code{font-family:Consolas,"Courier New",monospace;font-size:13px;word-break:break-all;display:block;margin-bottom:6px}
+  .empty{padding:32px 14px;color:var(--sub);text-align:center}
+  .keybox{background:#fff;border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:24px}
+  .keybox p{margin:0 0 8px;font-size:14px}
+  .keybox input{width:100%;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-bottom:8px}
+  .keybox .row{display:flex;gap:8px;align-items:center}
+  .keybox button.ghost{padding:8px 14px;font-size:14px}
+  .keynote{font-size:12px;color:var(--sub)}
+  @media (max-width:600px){
+    form{flex-direction:column}
+    button{padding:12px}
+    th:first-child,td:first-child{display:none}
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Place ID検索</h1>
+  <p class="lead">順位ツール（meotool）登録用。店名と住所の一部を入れて検索。</p>
+
+  <div class="keybox" id="keybox" hidden>
+    <p>Google Maps PlatformのAPIキーが未設定です。Places API (New) を有効にしたキーを入力してください（このブラウザにだけ保存されます）。</p>
+    <input type="text" id="keyInput" placeholder="AIza...">
+    <div class="row">
+      <button class="ghost" type="button" id="keySave">保存</button>
+      <span class="keynote">HTMLの API_KEY に直接書いてもOK</span>
+    </div>
+  </div>
+
+  <form id="f">
+    <input type="text" id="q" placeholder="例：鮨 及川 新宿" autocomplete="off" autofocus>
+    <button type="submit" id="go">検索</button>
+  </form>
+  <p class="hint">同名店の取り違え防止に、市区町村か駅名まで入れると絞れる。候補は最大10件。</p>
+
+  <p class="status" id="status"></p>
+  <div id="result"></div>
+</main>
+
+<script>
+// ▼ APIキーをここに貼ればキー入力欄は出なくなる（Cloud側でHTTPリファラ制限を必ず設定）
+const API_KEY = "AIzaSyB_An_8VFAAs7hhbRlmDqstZSWcRqDztm8";
+
+const KEY_LS = "placeid_finder_apikey";
+function getKey(){ return API_KEY || localStorage.getItem(KEY_LS) || ""; }
+
+const keybox = document.getElementById("keybox");
+const keyInput = document.getElementById("keyInput");
+document.getElementById("keySave").onclick = () => {
+  const v = keyInput.value.trim();
+  if(!v) return;
+  localStorage.setItem(KEY_LS, v);
+  keybox.hidden = true;
+  document.getElementById("q").focus();
+};
+if(!getKey()) keybox.hidden = false;
+
+const form = document.getElementById("f");
+const q = document.getElementById("q");
+const go = document.getElementById("go");
+const statusEl = document.getElementById("status");
+const result = document.getElementById("result");
+
+function setStatus(msg, err=false){
+  statusEl.textContent = msg;
+  statusEl.className = "status" + (err ? " err" : "");
+}
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const text = q.value.trim();
+  if(!text) return;
+  const key = getKey();
+  if(!key){ keybox.hidden = false; setStatus("APIキーを設定してください", true); return; }
+
+  go.disabled = true;
+  setStatus("検索中…");
+  result.innerHTML = "";
+
+  try{
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.businessStatus"
+      },
+      body: JSON.stringify({
+        textQuery: text,
+        languageCode: "ja",
+        regionCode: "JP",
+        pageSize: 10
+      })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      const m = data?.error?.message || res.status;
+      if(String(m).includes("API key") || res.status === 403) localStorage.removeItem(KEY_LS);
+      throw new Error(m);
+    }
+    render(data.places || []);
+  }catch(err){
+    setStatus("エラー：" + err.message, true);
+  }finally{
+    go.disabled = false;
+  }
+};
+
+function render(places){
+  if(!places.length){
+    setStatus("");
+    result.innerHTML = '<div class="empty">該当なし。店名の表記（漢字／カナ／スペース）を変えるか、住所を足して再検索。</div>';
+    return;
+  }
+  setStatus(places.length + "件");
+  const rows = places.map((p, i) => {
+    const closed = p.businessStatus === "CLOSED_PERMANENTLY" ? '<span class="closed">閉業</span>'
+                 : p.businessStatus === "CLOSED_TEMPORARILY" ? '<span class="closed">臨時休業</span>' : "";
+    return `<tr>
+      <td>${i+1}</td>
+      <td><div class="name">${esc(p.displayName?.text || "")}${closed}</div><div class="addr">${esc(p.formattedAddress || "")}</div></td>
+      <td><code>${esc(p.id)}</code><button class="ghost" type="button" data-id="${esc(p.id)}">コピー</button></td>
+    </tr>`;
+  }).join("");
+  result.innerHTML = `<table><thead><tr><th style="width:40px">#</th><th>店舗</th><th style="width:36%">Place ID</th></tr></thead><tbody>${rows}</tbody></table>`;
+  result.querySelectorAll("button[data-id]").forEach(b => {
+    b.onclick = async () => {
+      await navigator.clipboard.writeText(b.dataset.id);
+      const t = b.textContent; b.textContent = "コピーした";
+      setTimeout(() => b.textContent = t, 1200);
+    };
+  });
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+</script>
+</body>
+</html>
